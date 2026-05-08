@@ -1,0 +1,58 @@
+{
+  "entities": {
+    "Customer": {
+      "title": "Customer",
+      "description": "A person who owes or pays money to the vendor.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Customer's full name" },
+        "phone": { "type": "string", "description": "Customer's contact number for WhatsApp reminders" },
+        "totalDue": { "type": "number", "description": "Total amount currently owed by the customer" },
+        "lastTransactionDate": { "type": "string", "format": "date-time", "description": "The date of the most recent credit or payment" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the customer was first added" }
+      },
+      "required": ["name", "totalDue", "createdAt"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "A credit (Udari) or payment record.",
+      "type": "object",
+      "properties": {
+        "customerId": { "type": "string", "description": "ID of the customer" },
+        "amount": { "type": "number", "description": "Transaction amount in Rupees" },
+        "type": { "type": "string", "enum": ["credit", "payment"], "description": "Whether this was credit given or a payment received" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "When the transaction occurred" },
+        "note": { "type": "string", "description": "Optional note about the transaction" }
+      },
+      "required": ["customerId", "amount", "type", "timestamp"]
+    },
+    "Stats": {
+      "title": "Vendor Stats",
+      "description": "Aggregated totals for the vendor.",
+      "type": "object",
+      "properties": {
+        "totalOutstanding": { "type": "number", "description": "Sum of all pending dues" },
+        "totalSalesToday": { "type": "number", "description": "Total sales (credits) for today" },
+        "lastUpdated": { "type": "string", "format": "date-time", "description": "Last time stats were computed" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}/customers/{customerId}": {
+      "schema": "Customer",
+      "description": "Customers managed by a specific vendor."
+    },
+    "/users/{userId}/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Ledger entries for a specific vendor."
+    },
+    "/users/{userId}/stats/main": {
+      "schema": "Stats",
+      "description": "Global statistics for the vendor account."
+    },
+    "/users/{userId}/config/profile": {
+      "schema": "object",
+      "description": "User profile settings including business name."
+    }
+  }
+}

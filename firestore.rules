@@ -1,0 +1,68 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net (Implicit Default Deny)
+    
+    // 3. Primitives
+    function isSignedIn() { return request.auth != null; }
+    function isUser(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    // User Profile
+    match /users/{userId} {
+      allow get: if isUser(userId);
+    }
+
+    // Support collections
+    match /users/{userId}/stats/{statId} {
+      allow read: if isUser(userId);
+      allow write: if isUser(userId);
+    }
+
+    match /users/{userId}/config/{configId} {
+      allow read: if isUser(userId);
+      allow write: if isUser(userId);
+    }
+
+    // Customers
+    match /users/{userId}/customers/{customerId} {
+      function isValidCustomer(data) {
+        return data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+               (!('phone' in data) || data.phone == "" || (data.phone is string && data.phone.size() >= 10 && data.phone.size() <= 15 && data.phone.matches('^[0-9]+$'))) &&
+               data.totalDue is number &&
+               data.createdAt is timestamp;
+      }
+
+      allow read: if isUser(userId);
+      allow create: if isUser(userId) && isValidId(customerId) && 
+                    isValidCustomer(incoming()) && 
+                    incoming().totalDue == 0 &&
+                    incoming().createdAt == request.time;
+
+      allow update: if isUser(userId) && isValidCustomer(incoming()) &&
+                    incoming().createdAt == existing().createdAt && (
+                      (incoming().diff(existing()).affectedKeys().hasOnly(['name', 'phone', 'updatedAt'])) ||
+                      (incoming().diff(existing()).affectedKeys().hasOnly(['totalDue', 'lastTransactionDate']))
+                    );
+    }
+
+    // Transactions
+    match /users/{userId}/transactions/{transactionId} {
+      function isValidTransaction(data) {
+        return data.customerId is string && isValidId(data.customerId) &&
+               data.amount is number && data.amount > 0 && data.amount < 1000000 &&
+               data.type in ['credit', 'payment'] &&
+               (!('note' in data) || (data.note is string && data.note.size() <= 200)) &&
+               data.timestamp == request.time;
+      }
+
+      allow read: if isUser(userId);
+      allow create: if isUser(userId) && isValidId(transactionId) && 
+                    isValidTransaction(incoming()) &&
+                    (getAfter(/databases/$(database)/documents/users/$(userId)/customers/$(incoming().customerId)).data.totalDue == (get(/databases/$(database)/documents/users/$(userId)/customers/$(incoming().customerId)).data.get('totalDue', 0) + incoming().amount) ||
+                     getAfter(/databases/$(database)/documents/users/$(userId)/customers/$(incoming().customerId)).data.totalDue == (get(/databases/$(database)/documents/users/$(userId)/customers/$(incoming().customerId)).data.get('totalDue', 0) - incoming().amount));
+    }
+  }
+}
